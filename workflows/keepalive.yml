@@ -1,0 +1,29 @@
+name: Keep bot warm
+
+# Render's free tier spins a web service down after ~15 min of no incoming
+# HTTP traffic, and a cold boot can eat 30-60s — enough to blow the judge's
+# per-call timeout on the first /v1/healthz check. This pings the *public*
+# endpoint (not an internal loop, which wouldn't count as external traffic)
+# every 10 minutes to keep the instance warm.
+#
+# Caveat: GitHub Actions free-tier cron is best-effort, not real-time — it can
+# slip a few minutes under load. This reduces cold-start risk, it doesn't
+# eliminate it. For the actual scored test window, still consider upgrading
+# to Render's paid tier (no spin-down) or starting this workflow's manual
+# trigger ~20 min beforehand.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /v1/healthz
+        run: |
+          if [ -z "${{ vars.BOT_URL }}" ]; then
+            echo "BOT_URL repository variable not set yet — skipping (set it in Settings > Secrets and variables > Actions > Variables once deployed)."
+            exit 0
+          fi
+          curl -sf "${{ vars.BOT_URL }}/v1/healthz" || echo "ping failed (bot may be cold-starting or down)"
